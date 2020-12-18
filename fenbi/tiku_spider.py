@@ -215,7 +215,7 @@ class TikuSpider(object):
 
             logger.info(f'Area scraped done. | area: {area_name} | process: {cur_area_num}/{total_area_count}')
 
-        logger.info(f'All paper scrape done. | paper_download_count: {self.paper_download_count}')
+        logger.info(f'All papers scrape done. | paper_download_count: {self.paper_download_count}')
 
 
 if __name__ == '__main__':
