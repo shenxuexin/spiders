@@ -219,5 +219,5 @@ class TikuSpider(object):
 
 
 if __name__ == '__main__':
-    tiku_spider = TikuSpider(phone='16534088033', password='abc123', mode='shenlun')
+    tiku_spider = TikuSpider(phone='', password='', mode='shenlun')
     tiku_spider.main()
