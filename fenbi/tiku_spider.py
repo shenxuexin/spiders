@@ -1,6 +1,7 @@
 # -*-coding:utf-8-*-
 import os
 import time
+import sys
 import requests
 import execjs
 
@@ -23,12 +24,32 @@ class TikuSpider(object):
         self.session.headers.update({'User-Agent': USER_AGENT})
         self.session.verify = False
 
+        self.anti_scrape = False
+
         # 设置存储路径
         self.mode_save_path = os.path.join(FILE_SAVE_PATH, self.mode)
         if not os.path.exists(self.mode_save_path):
             os.makedirs(self.mode_save_path)
 
-        self.anti_scrape = False
+    def safe_request(self, method, url, data=None, params=None):
+        try:
+            if method == 'get':
+                response = self.session.get(url, params=params)
+            elif method == 'post':
+                response = self.session.post(url, data=data, params=params)
+            else:
+                logger.error(f'Not support request method.')
+                return
+
+            if response.status_code == '403':
+                logger.error(f'Anti scrape. scraper stop.')
+                self.anti_scrape = True
+                sys.exit(0)
+        except Exception as e:
+            logger.error(f'Request failed. | Exception: {e}')
+            return
+
+        return response
 
     def encode_paw(self, code):
         with open('password_encrypt.js') as f:
@@ -41,7 +62,7 @@ class TikuSpider(object):
         password = self.encode_paw(self.password)
         data = {'phone': self.phone, 'password': password}
         login_url = BASIC_SERVER_URL + LOGIN_URL
-        resp = self.session.post(login_url, data=data)
+        resp = self.safe_request('post', login_url, data=data)
 
         try:
             user_info = resp.json()
@@ -59,7 +80,7 @@ class TikuSpider(object):
     def get_sublabel_info(self):
         '''获取区域id'''
         sublabel_url = BASIC_SERVER_URL + SUBLABEL_URL.format(self.mode)
-        sublabel_resp = self.session.get(sublabel_url)
+        sublabel_resp = self.safe_request('get', sublabel_url)
 
         try:
             sublabel_info_list = sublabel_resp.json()
@@ -86,18 +107,20 @@ class TikuSpider(object):
         has_next_page = True
         cur_page = 0
         while has_next_page:
+            args = {'toPage': cur_page, 'pageSize': PAPER_SIZE, 'labelId': sublabel_id}
+            paper_info_resp = self.safe_request('get', paper_list_url, params=args)
+
             try:
-                args = {'toPage': cur_page, 'pageSize': PAPER_SIZE, 'labelId': sublabel_id}
-                paper_info_resp = self.session.get(paper_list_url, params=args).json()
+                paper_info = paper_info_resp.json()
             except Exception as e:
                 logger.error(f'Get paper list failed. | Exception: {e}')
                 return
 
             # 添加到试卷列表
-            cur_page_paper_list = paper_info_resp.get('list')
+            cur_page_paper_list = paper_info.get('list')
             paper_list.extend(cur_page_paper_list)
 
-            page_info = paper_info_resp.get('pageInfo')
+            page_info = paper_info.get('pageInfo')
             total_page = page_info.get('totalPage')
             cur_page += 1
 
@@ -116,10 +139,11 @@ class TikuSpider(object):
         if paper_info.get('exercise'):
             exercise_id = paper_info['exercise']['id']
         else:
+            data = {'type': TYPE, 'paperId': paper_info.get('id'), 'exerciseTimeMode': EXERCISE_TIME_MODE}
+            exercise_info_url = BASIC_SERVER_URL + EXERCISE_INFO_URL.format(self.mode)
+            exercise_info = self.safe_request('post', exercise_info_url, data=data)
+
             try:
-                data = {'type': TYPE, 'paperId': paper_info.get('id'), 'exerciseTimeMode': EXERCISE_TIME_MODE}
-                exercise_info_url = BASIC_SERVER_URL + EXERCISE_INFO_URL.format(self.mode)
-                exercise_info = self.session.post(exercise_info_url, data=data)
                 exercise_id = exercise_info.json().get('id')
             except Exception as e:
                 logger.error(f'Get exercise id failed. | Exception: {e}')
@@ -154,11 +178,7 @@ class TikuSpider(object):
                 logger.info(f'Paper already exists. | title: {paper_title}')
                 continue
 
-            try:
-                paper_resp = self.session.get(paper_download_url)
-            except Exception as e:
-                logger.error(f'Download paper failed. | title: {paper_title} | Exception: {e}')
-                continue
+            paper_resp = self.safe_request('get', paper_download_url)
 
             with open(paper_file_path, 'wb') as f:
                 f.write(paper_resp.content)
