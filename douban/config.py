@@ -11,3 +11,5 @@ SLEEP_PER_REQUEST = 3
 
 IMG_DOWNLOAD_PATH = '.\\book_img'
 FILE_SAVE_PATH = '.\\book_info'
+
+BATCH_PER_GEVENT = 10
