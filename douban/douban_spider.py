@@ -5,6 +5,9 @@
     @File    : douban_spider.py
     @software:PyCharm
 """
+import gevent
+from gevent import monkey, pool
+monkey.patch_all()
 
 import sys
 import os
@@ -85,7 +88,7 @@ class DoubanSpider(object):
 
             return keyword
 
-    def get_books_info(self, cate_info):
+    def get_books_info(self, cate_info, book_count_dict):
         cate_name_cn, cate_url = cate_info
         logger.info(f'Start getting book info. | category: {cate_name_cn}')
 
@@ -144,7 +147,8 @@ class DoubanSpider(object):
             total = book_page_info.get('total', 0)
             num += per_page
 
-        book_info_dict = {'category': cate_name_cn, 'count': len(book_info_list), 'book_info_list': book_info_list}
+        book_count_dict.update({cate_name_cn: len(book_info_list)})
+        book_info_dict = {'category': cate_name_cn, 'book_info_list': book_info_list}
         logger.info(f'Get book info successful. | category: {cate_name_cn} | count: {len(book_info_list)}')
         return book_info_dict
 
@@ -190,6 +194,14 @@ class DoubanSpider(object):
         workbook.save(self.excel_save_path)
         logger.info(f'Save excel successful. | path: {self.excel_save_path}')
 
+    def scrape_per_category(self, book_cate_info, book_count_dict):
+        books_info = self.get_books_info(book_cate_info, book_count_dict)
+        if not books_info:
+            return
+
+        self.book_info_save(books_info)
+        time.sleep(SLEEP_PER_CATEGORY)
+
     def main(self):
         # 抓取图书
         time_start = datetime.now().replace(microsecond=0)
@@ -200,17 +212,11 @@ class DoubanSpider(object):
                 return
 
             book_count_dict = {book_cate_info[0]: 0 for book_cate_info in book_cate_list}
+            cate_pool = pool.Pool(BATCH_PER_GEVENT)
             for book_cate_info in book_cate_list:
-                books_info = self.get_books_info(book_cate_info)
-
-                if not books_info:
-                    continue
-
-                self.book_info_save(books_info)
-                book_count = books_info.get('count', 0)
-                book_count_dict.update({book_cate_info[0]: book_count})
-
-                time.sleep(SLEEP_PER_CATEGORY)
+                cate_gl = gevent.spawn(self.scrape_per_category, book_cate_info, book_count_dict)
+                cate_pool.add(cate_gl)
+            cate_pool.join()
 
             time_span = (datetime.now() - time_start).seconds
             logger.info(f'Scrape books done. | time_span: {time_span}s | count: {book_count_dict}')
