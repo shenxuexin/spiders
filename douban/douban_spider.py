@@ -41,10 +41,10 @@ class DoubanSpider(object):
     def safe_get(self, url, params=None):
         try:
             response = self.session.get(url, params=params)
-            if response.status_code == '403':
+            if response.status_code == 403:
                 logger.error(f'Anti scraper. exit.')
                 sys.exit(0)
-            elif response.status_code == '404':
+            elif response.status_code == 404:
                 logger.error(f'404 Not found.')
         except Exception as e:
             logger.error(f'Request failed. | Exception: {e}')
